@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Geoportal de Gestión Predial | JOR Ingenieros Consultores</title>
+
+    <!-- OpenLayers CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v8.2.0/ol.css">
+
+    <!-- Tailwind CSS (CDN from the Stitch Template) -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    
+    <!-- Proj4js for UTM Support (EPSG:32717) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
+
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#10186f",
+                        "primary-container": "#2a3285",
+                        "secondary-container": "#fddf4d",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-low": "#f3f3f3",
+                        "surface-container": "#eeeeee",
+                        "background": "#f9f9f9",
+                        "on-surface": "#1a1c1c",
+                    },
+                    "fontFamily": {
+                        "sans": ["Inter", "sans-serif"],
+                    }
+                },
+            },
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #c6c5d3;
+            border-radius: 10px;
+        }
+
+        /* Map Custom Styles */
+        .ol-control button {
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            color: #2a3285 !important;
+            border-radius: 5px;
+            border: 1px solid rgba(42, 50, 133, 0.2) !important;
+        }
+
+        .ol-control button:hover {
+            background-color: #2a3285 !important;
+            color: white !important;
+        }
+
+        /* Custom Scale Line Style */
+        .ol-scale-line {
+            background: transparent !important;
+            bottom: 2rem !important;
+            left: 2rem !important;
+        }
+
+        .ol-scale-line-inner {
+            border: 2px solid #555 !important;
+            border-top: none !important;
+            color: #444 !important;
+            font-size: 10px !important;
+            font-weight: 700 !important;
+            text-shadow: 1px 1px 0px rgba(255, 255, 255, 0.5);
+            font-family: inherit;
+        }
+    </style>
+</head>
+
+<body class="bg-background text-on-surface overflow-hidden h-screen flex flex-col">
+
+    <!-- TopNavBar -->
+    <header class="bg-[#F9F9F9] dark:bg-slate-900 flex justify-between items-center h-14 w-full px-6 z-50 shadow-sm">
+        <div class="flex items-center gap-4">
+            <img src="img/logo_jor.png" alt="JOR Ingenieros" class="h-10 w-auto object-contain drop-shadow-sm brightness-110 contrast-125 dark:brightness-100 dark:contrast-100" />
+            <div class="h-8 border-l-2 border-slate-300 dark:border-slate-700 hidden sm:block"></div>
+            <h1 class="text-lg font-bold text-primary-container dark:text-blue-300 font-sans tracking-tight">Geoportal
+                de Gestión Predial</h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <div id="cloud-status-badge" class="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80 rounded-full text-xs font-semibold shadow-xs">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Supabase Cloud Conectado</span>
+            </div>
+            <button id="btn-theme-toggle"
+                class="p-2 text-slate-500 hover:bg-surface-container dark:hover:bg-slate-800 transition-colors duration-200 rounded-lg">
+                <span class="material-symbols-outlined">dark_mode</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden relative">
+        <!-- SideNavBar -->
+        <aside
+            class="fixed left-0 top-14 bottom-0 z-40 flex flex-col pt-4 bg-surface-container dark:bg-slate-900/95 h-full w-80 rounded-tr-xl shadow-[0_12px_40px_rgba(42,50,133,0.06)] font-sans text-sm font-medium tracking-wide transition-transform duration-300 transform translate-x-0"
+            id="sidebar">
+
+
+            <!-- Search Field -->
+            <div class="px-6 mb-4">
+                <div class="relative flex items-center">
+                    <button id="btn-search-exec" class="absolute left-3 text-slate-400 hover:text-primary-container transition-colors">
+                        <span class="material-symbols-outlined text-lg">search</span>
+                    </button>
+                    <input
+                        class="w-full bg-surface-container-lowest border-none rounded-lg pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-primary-container shadow-sm transition-all"
+                        placeholder="Buscar código o propietario..." type="text" id="search-input" />
+                </div>
+            </div>
+
+            <!-- Search Results -->
+            <div id="search-results-container" class="px-6 mb-4 hidden transition-all duration-300">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Coincidencias Encontradas</span>
+                    <button id="btn-clear-search" class="text-[10px] text-primary hover:text-primary-container transition-colors font-bold uppercase">Limpiar</button>
+                </div>
+                <div id="search-results-list" class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar p-1">
+                    <!-- Results will be injected here -->
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <nav class="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-1 px-3">
+
+                <!-- Layer Manager Section -->
+                <div class="mt-2 px-3 mb-2">
+                    <div
+                        class="flex items-center gap-4 py-3 text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-300">
+                        <span class="material-symbols-outlined">layers</span>
+                        <span class="flex-1">Control de Capas</span>
+                    </div>
+                    <div class="flex flex-col gap-2 mt-3 select-none">
+                        
+                        <!-- Group 1: Inventario de Mejoras -->
+                        <div class="layer-group border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden">
+                            <div class="flex items-center gap-2 p-2 cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors" onclick="const c = this.parentElement.querySelector('.group-content'); c.classList.toggle('hidden'); const icon = this.querySelector('.material-symbols-outlined'); icon.innerText = c.classList.contains('hidden') ? 'add_box' : 'indeterminate_check_box';">
+                                <span class="material-symbols-outlined text-slate-500 text-lg transition-transform">indeterminate_check_box</span>
+                                <input id="group-inventario" checked type="checkbox" class="rounded text-primary focus:ring-primary-container h-4 w-4" onclick="event.stopPropagation(); window.toggleGroup(this, 'grp-inv');"/>
+                                <span class="text-slate-700 text-[11px] font-bold uppercase tracking-wide">Inventario de Mejoras</span>
+                            </div>
+                            <div class="group-content flex flex-col gap-3 px-4 py-3 bg-white border-t border-slate-100">
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input id="layer-poligono" data-group="grp-inv" checked class="rounded text-primary focus:ring-primary-container h-4 w-4 transition-all" type="checkbox" />
+                                    <span class="text-slate-600 text-[11px] font-medium">Inventario Polígonos</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input id="layer-linea" data-group="grp-inv" checked class="rounded text-primary focus:ring-primary-container h-4 w-4 transition-all" type="checkbox" />
+                                    <span class="text-slate-600 text-[11px] font-medium">Inventario Líneas</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input id="layer-punto" data-group="grp-inv" checked class="rounded text-primary focus:ring-primary-container h-4 w-4 transition-all" type="checkbox" />
+                                    <span class="text-slate-600 text-[11px] font-medium">Inventario Puntos</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Group 2: Liberación Predial -->
+                        <div class="layer-group border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden">
+                            <div class="flex items-center gap-2 p-2 cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors" onclick="const c = this.parentElement.querySelector('.group-content'); c.classList.toggle('hidden'); const icon = this.querySelector('.material-symbols-outlined'); icon.innerText = c.classList.contains('hidden') ? 'add_box' : 'indeterminate_check_box';">
+                                <span class="material-symbols-outlined text-slate-500 text-lg transition-transform">indeterminate_check_box</span>
+                                <input id="group-liberacion" checked type="checkbox" class="rounded text-primary focus:ring-primary-container h-4 w-4" onclick="event.stopPropagation(); window.toggleGroup(this, 'grp-lib');"/>
+                                <span class="text-slate-700 text-[11px] font-bold uppercase tracking-wide">Liberación Predial</span>
+                            </div>
+                            <div class="group-content flex flex-col gap-3 px-4 py-3 bg-white border-t border-slate-100">
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input id="layer-predios" data-group="grp-lib" checked class="rounded text-primary focus:ring-primary-container h-4 w-4 transition-all" type="checkbox" />
+                                    <span class="text-slate-600 text-[11px] font-medium">Predios Afectados</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input id="layer-liberacion" data-group="grp-lib" checked class="rounded text-primary focus:ring-primary-container h-4 w-4 transition-all" type="checkbox" />
+                                    <span class="text-slate-600 text-[11px] font-medium">Polígonos Liberación</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Group 3: Límites Políticos -->
+                        <div class="layer-group border border-slate-200 rounded-lg bg-white shadow-sm overflow-hidden">
+                            <div class="flex items-center gap-2 p-2 cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors" onclick="const c = this.parentElement.querySelector('.group-content'); c.classList.toggle('hidden'); const icon = this.querySelector('.material-symbols-outlined'); icon.innerText = c.classList.contains('hidden') ? 'add_box' : 'indeterminate_check_box';">
+                                <span class="material-symbols-outlined text-slate-500 text-lg transition-transform">indeterminate_check_box</span>
+                                <input id="group-limites" checked type="checkbox" class="rounded text-primary focus:ring-primary-container h-4 w-4" onclick="event.stopPropagation(); window.toggleGroup(this, 'grp-lim');"/>
+                                <span class="text-slate-700 text-[11px] font-bold uppercase tracking-wide">Límites Políticos</span>
+                            </div>
+                            <div class="group-content flex flex-col gap-3 px-4 py-3 bg-white border-t border-slate-100">
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input id="layer-lim-departamental" data-group="grp-lim" checked class="rounded text-primary focus:ring-primary-container h-4 w-4 transition-all" type="checkbox" />
+                                    <span class="text-slate-600 text-[11px] font-medium">Límite Departamental</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input id="layer-lim-provincial" data-group="grp-lim" checked class="rounded text-primary focus:ring-primary-container h-4 w-4 transition-all" type="checkbox" />
+                                    <span class="text-slate-600 text-[11px] font-medium">Límite Provincial</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer group">
+                                    <input id="layer-lim-distrital" data-group="grp-lim" checked class="rounded text-primary focus:ring-primary-container h-4 w-4 transition-all" type="checkbox" />
+                                    <span class="text-slate-600 text-[11px] font-medium">Límite Distrital</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                </div>
+            </nav>
+
+            <div class="p-6 border-t border-slate-300 mt-auto">
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-bold text-slate-600 uppercase w-full">Mapa Base:</label>
+                    <select id="basemap-select"
+                        class="text-xs rounded border-none bg-white p-1 flex-1 shadow-sm text-slate-700">
+                        <option value="osm">OSM Estandar</option>
+                        <option value="satellite" selected>Satélite (Google)</option>
+                    </select>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Map Canvas -->
+        <section class="flex-1 relative ml-80 mr-80 transition-all duration-300" id="map-section">
+            <!-- OpenLayers Map Container -->
+            <div id="map" class="w-full h-full bg-surface-container-low overflow-hidden"></div>
+
+            <!-- Toggle Sidebar Button (Desktop Left) -->
+            <button id="toggle-sidebar"
+                class="absolute top-4 left-4 z-[60] bg-white text-primary p-2 rounded-lg shadow-md hover:bg-slate-50 transition-colors">
+                <span class="material-symbols-outlined">menu_open</span>
+            </button>
+
+            <!-- Toggle Dashboard Button (Desktop Right) -->
+            <button id="toggle-dashboard"
+                class="absolute top-4 right-4 z-[60] bg-white text-primary p-2 rounded-lg shadow-md hover:bg-slate-50 transition-colors">
+                <span class="material-symbols-outlined">analytics</span>
+            </button>
+
+            <!-- Floating Tools -->
+            <div
+                class="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 flex gap-4 p-2 bg-white/90 backdrop-blur-md rounded-full mb-6 shadow-lg transform transition-transform">
+                <button
+                    class="text-primary-container p-3 hover:bg-primary/10 rounded-full transition-all flex flex-col items-center gap-1 group"
+                    id="tool-zoom-in">
+                    <span class="material-symbols-outlined group-hover:scale-110 transition-transform">zoom_in</span>
+                </button>
+                <button
+                    class="text-primary-container p-3 hover:bg-primary/10 rounded-full transition-all flex flex-col items-center gap-1 group"
+                    id="tool-zoom-out">
+                    <span class="material-symbols-outlined group-hover:scale-110 transition-transform">zoom_out</span>
+                </button>
+                <div class="w-px bg-slate-300 my-2"></div>
+                <button
+                    class="text-primary-container p-3 hover:bg-primary/10 rounded-full transition-all flex item-center gap-1 group"
+                    title="Medir Distancia" id="tool-measure">
+                    <span class="material-symbols-outlined group-hover:scale-110 transition-transform">straighten</span>
+                </button>
+                <button
+                    class="text-primary-container p-3 hover:bg-primary/10 rounded-full transition-all flex item-center gap-1 group"
+                    title="Limpiar Mapa" id="tool-clear">
+                    <span class="material-symbols-outlined group-hover:scale-110 transition-transform">delete</span>
+                </button>
+                <div class="w-px bg-slate-300 my-2"></div>
+                <button
+                    class="text-primary-container p-3 hover:bg-primary/10 rounded-full transition-all flex item-center gap-1 group"
+                    title="Ver Leyenda" id="tool-legend">
+                    <span class="material-symbols-outlined group-hover:scale-110 transition-transform">legend_toggle</span>
+                </button>
+            </div>
+
+            <!-- Attribute Panel (GetFeatureInfo Result) -->
+            <div id="attribute-panel"
+                class="absolute bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200 flex flex-col transition-opacity duration-300 opacity-0 pointer-events-none"
+                style="top: 100px; left: calc(100vw - 380px); width: 320px; min-width: 200px; min-height: 150px; max-height: 80vh; max-width: 90vw; resize: both; overflow: hidden; z-index: 100;">
+                <div id="attribute-panel-header"
+                    class="flex items-center justify-between p-4 pb-3 border-b border-slate-100 cursor-move bg-slate-50/50 hover:bg-slate-100/50 transition-colors">
+                    <h3 class="text-primary-container font-bold flex items-center gap-2 pointer-events-none">
+                        <span class="material-symbols-outlined text-lg">info_i</span>
+                        <span id="attribute-panel-title">Detalles Capa</span>
+                    </h3>
+                    <button id="close-panel"
+                        class="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                        style="z-index: 50;">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-auto p-4 pt-2">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <tbody class="text-slate-700" id="feature-info-content">
+                            <!-- Dynamic content will go here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- Dashboard Analytics Sidebar Right -->
+            <aside id="dashboard-analytics" 
+                class="fixed right-0 top-14 bottom-0 w-80 z-40 bg-surface-container dark:bg-slate-900/95 flex flex-col pt-4 rounded-tl-xl shadow-[-12px_12px_40px_rgba(42,50,133,0.06)] font-sans transition-transform duration-300 transform translate-x-0 overflow-y-auto custom-scrollbar">
+                
+                <div class="px-6 mb-6">
+                    <div class="flex items-center gap-2 border-b border-slate-300 pb-3">
+                        <span class="material-symbols-outlined text-primary">analytics</span>
+                        <h2 class="text-xs font-bold text-slate-700 uppercase tracking-widest">Dashboard Estadístico</h2>
+                    </div>
+                </div>
+
+                <div class="px-6 mb-4">
+                    <!-- KPI: Total Predios -->
+                    <div class="bg-white rounded-xl p-6 text-center border border-slate-200 shadow-sm mb-6">
+                        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Total Predios</span>
+                        <span id="kpi-total-predios" class="text-5xl font-extrabold text-primary tracking-tighter">0</span>
+                    </div>
+
+                    <!-- Chart: Distribución cond_afec -->
+                    <div class="flex flex-col bg-white rounded-xl p-4 border border-slate-200 shadow-sm min-h-[420px] mb-6">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-4 border-l-2 border-primary pl-2">Distribución por Condición</span>
+                        <div class="relative flex-1" style="height: 320px;">
+                            <canvas id="chart-artdl"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- [NUEVO] Resumen de Inventario Detectado -->
+                    <div id="inventory-summary-container" class="hidden flex flex-col bg-white rounded-xl p-5 border border-slate-200 shadow-sm mb-6 transition-all duration-300">
+                        <div class="flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
+                            <span class="material-symbols-outlined text-primary text-lg">inventory_2</span>
+                            <div class="flex flex-col">
+                                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Inventario Detectado</span>
+                                <span id="inventory-predio-id" class="text-xs font-extrabold text-primary-container">CÓDIGO: ---</span>
+                            </div>
+                        </div>
+                        <div id="inventory-summary-list" class="flex flex-wrap gap-2">
+                            <!-- Los tags se inyectarán aquí -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-auto p-6 border-t border-slate-300">
+                    <div class="flex items-center justify-between">
+                        <div class="flex flex-col">
+                            <span class="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Campo: cond_afec</span>
+                            <span class="text-[8px] text-slate-500 font-medium">Actualizado: <span id="last-update">--:--</span></span>
+                        </div>
+                        <button id="btn-refresh-dashboard" class="bg-secondary-container text-amber-900 p-2 rounded-lg hover:brightness-95 transition-all shadow-sm">
+                            <span class="material-symbols-outlined text-lg">refresh</span>
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Floating Legend Popup -->
+            <div id="legend-popup"
+                class="absolute bottom-24 right-6 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 w-64 max-h-[60vh] flex flex-col transition-all duration-300 opacity-0 pointer-events-none transform translate-y-4">
+                <div class="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
+                    <h3 class="text-primary-container font-extrabold text-sm flex items-center gap-2">
+                        <span class="material-symbols-outlined text-lg text-primary">legend_toggle</span>
+                        LEYENDA
+                    </h3>
+                    <button id="close-legend" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 custom-scrollbar bg-white">
+                    <div class="space-y-5" id="legend-container">
+                        <!-- Predios Afectados -->
+                        <div id="legend-item-predios">
+                            <span class="text-[10px] text-slate-500 uppercase tracking-widest font-bold block mb-2 border-l-2 border-primary pl-2">Predios Afectados</span>
+                            <div class="space-y-1.5 bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-[11px]">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-4 h-3.5 rounded border border-[#d93025] bg-[#f28b82]/50 inline-block shadow-xs"></span>
+                                    <span class="text-slate-700 font-medium">Propietario</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-4 h-3.5 rounded border border-[#e06040] bg-[#e5b3a3]/50 inline-block shadow-xs"></span>
+                                    <span class="text-slate-700 font-medium">Poseedor</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-4 h-3.5 rounded border border-[#8e24aa] bg-[#d6b6d6]/50 inline-block shadow-xs"></span>
+                                    <span class="text-slate-700 font-medium">Ocupante</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-4 h-3.5 rounded border border-[#5f6368] bg-[#cad2d3]/50 inline-block shadow-xs"></span>
+                                    <span class="text-slate-700 font-medium">Duplicidad</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Liberación -->
+                        <div id="legend-item-liberacion">
+                            <span class="text-[10px] text-slate-500 uppercase tracking-widest font-bold block mb-2 border-l-2 border-emerald-600 pl-2">Liberación Predial</span>
+                            <div class="flex items-center gap-2.5 bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-[11px]">
+                                <span class="w-5 h-3.5 rounded border-2 border-dashed border-[#2e7d32] bg-[#4caf50]/25 inline-block"></span>
+                                <span class="text-slate-700 font-medium">Polígonos Liberación</span>
+                            </div>
+                        </div>
+
+                        <!-- Inventario de Mejoras -->
+                        <div id="legend-group-inventario">
+                            <span class="text-[10px] text-slate-500 uppercase tracking-widest font-bold block mb-2 border-l-2 border-amber-500 pl-2">Inventario de Mejoras</span>
+                            <div class="space-y-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-[11px]">
+                                <div id="legend-item-inv-poligono" class="flex items-center gap-2.5">
+                                    <span class="w-4 h-3.5 rounded border border-[#e65100] bg-[#ff9800]/35 inline-block"></span>
+                                    <span class="text-slate-700 font-medium">Polígonos (Edif. / Obras)</span>
+                                </div>
+                                <div id="legend-item-inv-linea" class="flex items-center gap-2.5">
+                                    <span class="w-4 h-1 rounded-full bg-[#e53935] inline-block"></span>
+                                    <span class="text-slate-700 font-medium">Líneas (Cercos / Infra.)</span>
+                                </div>
+                                <div id="legend-item-inv-punto" class="flex items-center gap-2.5">
+                                    <span class="w-3.5 h-3.5 rounded-full bg-[#d81b60] border-2 border-white shadow-xs inline-block"></span>
+                                    <span class="text-slate-700 font-medium">Puntos (Plantas / Pozos)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Límites Políticos -->
+                        <div id="legend-group-limites">
+                            <span class="text-[10px] text-slate-500 uppercase tracking-widest font-bold block mb-2 border-l-2 border-slate-400 pl-2">Límites Políticos</span>
+                            <div class="space-y-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-[11px]">
+                                <div id="legend-item-lim-departamental" class="flex items-center gap-2.5">
+                                    <span class="w-5 h-1 rounded-full bg-[#0f172a] inline-block"></span>
+                                    <span class="text-slate-700 font-medium">Departamental</span>
+                                </div>
+                                <div id="legend-item-lim-provincial" class="flex items-center gap-2.5">
+                                    <span class="w-5 h-0.5 border-b-2 border-dashed border-[#475569] inline-block"></span>
+                                    <span class="text-slate-700 font-medium">Provincial</span>
+                                </div>
+                                <div id="legend-item-lim-distrital" class="flex items-center gap-2.5">
+                                    <span class="w-5 h-0.5 border-b border-dotted border-[#94a3b8] inline-block"></span>
+                                    <span class="text-slate-700 font-medium">Distrital</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- OpenLayers JS -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@v8.2.0/dist/ol.js"></script>
+    <!-- App JS -->
+    <script src="js/app.js"></script>
+    <!-- Map JS -->
+    <script src="js/map.js"></script>
+
+</body>
+
+</html>
